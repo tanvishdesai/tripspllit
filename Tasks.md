@@ -18,45 +18,45 @@ This document tracks the development tasks for the TripSplit application.
 #### Milestone 1: Project Foundation & User Authentication (In Progress)
 
 *   `[x]` Initialize Next.js 14 project with TypeScript and Tailwind CSS.
-*   `[ ]` Setup Vercel project and link to GitHub repository.
-*   `[ ]` Provision a Vercel Postgres database and connect it to the Vercel project.
-*   `[ ]` Setup Prisma ORM and define initial `User` schema (`name`, `email`, `password`, `upiId`).
-*   `[ ]` Run initial Prisma migration to create the `User` table.
-*   `[ ]` Integrate `Next-Auth.js` for authentication.
-    *   `[ ]` Configure an Email/Password provider.
-    *   `[ ]` Create the sign-up page/form with a required `upiId` field.
-    *   `[ ]` Create the login page/form.
-    *   `[ ]` Create a protected `/dashboard` route that only logged-in users can see.
-*   `[ ]` Build a basic navigation bar showing login/logout status.
+*   `[x]` Setup Vercel project and link to GitHub repository.
+*   `[x]` Provision a Vercel SupaBase database and connect it to the Vercel project.
+*   `[x]` Setup Prisma ORM and define initial `User` schema (`name`, `email`, `password`, `upiId`).
+*   `[x]` Run initial Prisma migration to create the `User` table.
+*   `[x]` Integrate `Next-Auth.js` for authentication.
+    *   `[x]` Configure an Email/Password provider.
+    *   `[x]` Create the sign-up page/form with a required `upiId` field.
+    *   `[x]` Create the login page/form.
+    *   `[x]` Create a protected `/dashboard` route that only logged-in users can see.
+*   `[x]` Build a basic navigation bar showing login/logout status.
 
-#### Milestone 2: Core Trip & Expense Functionality (Backlog)
+#### Milestone 2: Core Trip & Expense Functionality (✅ Completed)
 
-*   `[ ]` **Database:** Define `Trip`, `Expense`, and `TripUser` schemas in Prisma and migrate the database.
-*   `[ ]` **API:** Create API route for creating a new trip (`POST /api/trips`).
-*   `[ ]` **API:** Create API route for fetching a user's trips (`GET /api/trips`).
-*   `[ ]` **API:** Create API route for adding an expense to a trip (`POST /api/trips/[tripId]/expenses`).
-*   `[ ]` **UI:** Build the user dashboard to list all their trips.
-*   `[ ]` **UI:** Create a "New Trip" form.
-*   `[ ]` **UI:** Build the individual trip page (`/trips/[tripId]`).
-    *   `[ ]` Display trip name and members.
-    *   `[ ]` List all expenses with title, amount, and who paid.
-    *   `[ ]` Create an "Add Expense" form/modal on this page.
-*   `[ ]` **Functionality:** Implement logic to invite/add friends to a trip (future enhancement could be by email).
+*   `[x]` **Database:** Define `Trip`, `Expense`, and `TripUser` schemas in Prisma and migrate the database.
+*   `[x]` **API:** Create API route for creating a new trip (`POST /api/trips`).
+*   `[x]` **API:** Create API route for fetching a user's trips (`GET /api/trips`).
+*   `[x]` **API:** Create API route for adding an expense to a trip (`POST /api/trips/[tripId]/expenses`).
+*   `[x]` **UI:** Build the user dashboard to list all their trips.
+*   `[x]` **UI:** Create a "New Trip" form.
+*   `[x]` **UI:** Build the individual trip page (`/trips/[tripId]`).
+    *   `[x]` Display trip name and members.
+    *   `[x]` List all expenses with title, amount, and who paid.
+    *   `[x]` Create an "Add Expense" form/modal on this page.
+*   `[x]` **Functionality:** Implement logic to invite/add friends to a trip by email addresses.
 
 #### Milestone 3: Settlement & UPI Payment Flow (Backlog)
 
-*   `[ ]` **API:** Create a new API route for settlement calculation (`GET /api/trips/[tripId]/settle`).
-*   `[ ]` **Backend Logic:** Implement the settlement algorithm in the API route.
-    *   `[ ]` Fetch all expenses for the trip.
-    *   `[ ]` Fetch all users in the trip.
-    *   `[ ]` Calculate total cost and per-person share.
-    *   `[ ]` Calculate the balance for each user (`spent - share`).
-    *   `[ ]` **Crucial:** Implement a debt simplification algorithm to find the minimum number of transactions needed to settle up. (This prevents A->B, B->C, C->A cycles).
-    *   `[ ]` The API should return a simple array of transactions: `[{ from: User, to: User, amount: Number }]`.
-*   `[ ]` **UI:** Create a "Settle Up" tab/page within a trip.
-*   `[ ]` **UI:** Display the simplified settlement plan clearly (e.g., "You owe John $25", "Jane owes you $10").
-*   `[ ]` **UI:** For each payment the current user needs to make, display a "Pay with UPI" button.
-*   `[ ]` **Functionality:** Clicking the button should generate the correct `upi://pay?pa=...` URL and set it as the `href` of an anchor tag.
+*   `[x]` **API:** Create a new API route for settlement calculation (`GET /api/trips/[tripId]/settle`).
+*   `[x]` **Backend Logic:** Implement the settlement algorithm in the API route.
+    *   `[x]` Fetch all expenses for the trip.
+    *   `[x]` Fetch all users in the trip.
+    *   `[x]` Calculate total cost and per-person share.
+    *   `[x]` Calculate the balance for each user (`spent - share`).
+    *   `[x]` **Crucial:** Implement a debt simplification algorithm to find the minimum number of transactions needed to settle up. (This prevents A->B, B->C, C->A cycles).
+    *   `[x]` The API should return a simple array of transactions: `[{ from: User, to: User, amount: Number }]`.
+*   `[x]` **UI:** Create a "Settle Up" tab/page within a trip.
+*   `[x]` **UI:** Display the simplified settlement plan clearly (e.g., "You owe John $25", "Jane owes you $10").
+*   `[x]` **UI:** For each payment the current user needs to make, display a "Pay with UPI" button.
+*   `[x]` **Functionality:** Clicking the button should generate the correct `upi://pay?pa=...` URL and set it as the `href` of an anchor tag.
 
 #### Milestone 4: Polish, Testing & Deployment (Backlog)
 

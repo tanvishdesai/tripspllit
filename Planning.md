@@ -26,7 +26,7 @@ This project will follow a modern, serverless architecture to meet the constrain
 
 *   **Frontend:** A **Next.js** application. This will handle all UI, routing, and user-facing interactions. It will be deployed on **Vercel**.
 *   **Backend:** **Next.js API Routes**. Instead of a traditional, always-on server (like Express.js on a VM), we will use serverless functions for our backend logic. These are JavaScript/TypeScript files in the `/pages/api` directory of our Next.js project. Vercel automatically deploys these as globally distributed serverless functions. This is "self-hosted" in the sense that the code is yours and within your project, but you don't manage the underlying server infrastructure.
-*   **Database:** **Vercel Postgres**. This is a serverless PostgreSQL database that integrates directly with Vercel. It provides a real, robust SQL database without you needing to host it separately. It's the perfect solution for your "self-hosted database but no hosting provider" requirement.
+*   **Database:** **Vercel SupaBase**. This is a serverless SupaBase database that integrates directly with Vercel. It provides a real, robust SQL database without you needing to host it separately. It's the perfect solution for your "self-hosted database but no hosting provider" requirement.
 
 ### Architectural Flow:
 
@@ -39,7 +39,7 @@ User's Browser  <-->  Vercel (Next.js Frontend)
                       |
                       | (Database Queries via Prisma)
                       V
-                  Vercel Postgres (Serverless Database)
+                  Vercel SupaBase (Serverless Database)
 ```
 
 ## 4. Tech Stack & Tools
@@ -48,7 +48,7 @@ User's Browser  <-->  Vercel (Next.js Frontend)
 *   **Language:** **TypeScript**
 *   **Styling:** **Tailwind CSS** (for rapid UI development)
 *   **UI Components:** **Shadcn/ui** (accessible and composable components)
-*   **Database:** **Vercel Postgres**
+*   **Database:** **Vercel SupaBase**
 *   **ORM:** **Prisma** (for type-safe database access and schema management)
 *   **Authentication:** **Next-Auth.js (v5 / Auth.js)** (for secure and easy handling of user sessions)
 *   **Deployment:** **Vercel**
