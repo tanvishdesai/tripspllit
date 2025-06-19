@@ -151,24 +151,24 @@ export async function GET(
     // Get all trip members (including owner)
     const allMembers = [
       { user: trip.owner },
-      ...trip.tripUsers.map((tu: any) => ({ user: tu.user }))
+      ...trip.tripUsers.map((tu: { user: { id: string; name: string; email: string; upiId: string } }) => ({ user: tu.user }))
     ]
 
     // Remove duplicates if owner is also in tripUsers
     const uniqueMembers = allMembers.filter((member, index, self) => 
-      index === self.findIndex(m => m.user.id === member.user.id)
+      index === self.findIndex((m: { user: { id: string } }) => m.user.id === member.user.id)
     )
 
     // Calculate total expenses and per-person share
-    const totalExpenses = trip.expenses.reduce((sum: number, expense: any) => sum + expense.amount, 0)
+    const totalExpenses = trip.expenses.reduce((sum: number, expense: { amount: number }) => sum + expense.amount, 0)
     const memberCount = uniqueMembers.length
     const perPersonShare = memberCount > 0 ? totalExpenses / memberCount : 0
 
     // Calculate balance for each user
     const userBalances: UserBalance[] = uniqueMembers.map(member => {
       const totalPaid = trip.expenses
-        .filter((expense: any) => expense.paidBy.id === member.user.id)
-        .reduce((sum: number, expense: any) => sum + expense.amount, 0)
+        .filter((expense: { paidBy: { id: string } }) => expense.paidBy.id === member.user.id)
+        .reduce((sum: number, expense: { amount: number }) => sum + expense.amount, 0)
       
       const balance = totalPaid - perPersonShare
       

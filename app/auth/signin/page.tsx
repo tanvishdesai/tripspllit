@@ -33,7 +33,7 @@ export default function SignInPage() {
       } else {
         router.push("/dashboard")
       }
-    } catch (error) {
+    } catch {
       setError("An error occurred during sign in")
     } finally {
       setLoading(false)
@@ -117,7 +117,7 @@ export default function SignInPage() {
 
           <div className="text-center">
             <span className="text-sm text-gray-600">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
               <Link href="/auth/signup" className="font-medium text-indigo-600 hover:text-indigo-500">
                 Sign up
               </Link>

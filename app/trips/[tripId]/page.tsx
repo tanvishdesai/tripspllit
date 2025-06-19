@@ -102,9 +102,13 @@ export default function TripPage({ params }: { params: { tripId: string } }) {
   const [settlementLoading, setSettlementLoading] = useState(false)
 
   useEffect(() => {
-    if (status === "loading") return // Still loading
-    if (!session) router.push("/auth/signin") // Not authenticated
-    if (session) fetchTrip() // Fetch trip when authenticated
+    const handleAuth = async () => {
+      if (status === "loading") return // Still loading
+      if (!session) router.push("/auth/signin") // Not authenticated
+      if (session) await fetchTrip() // Fetch trip when authenticated
+    }
+    handleAuth()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session, status, router, params.tripId])
 
   const fetchTrip = async () => {
@@ -224,10 +228,14 @@ export default function TripPage({ params }: { params: { tripId: string } }) {
   }
 
   useEffect(() => {
-    if (activeTab === 'settle' && !settlementData) {
-      fetchSettlement()
+    const handleSettlement = async () => {
+      if (activeTab === 'settle' && !settlementData) {
+        await fetchSettlement()
+      }
     }
-  }, [activeTab])
+    handleSettlement()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, settlementData])
 
   if (status === "loading") {
     return (
