@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate member emails if provided
-    let memberUsers = []
+    let memberUsers: { id: string }[] = []
     if (memberEmails && Array.isArray(memberEmails) && memberEmails.length > 0) {
       memberUsers = await prisma.user.findMany({
         where: {
@@ -136,6 +136,9 @@ export async function POST(req: NextRequest) {
               email !== user.email // Don't include the owner
             )
           }
+        },
+        select: {
+          id: true
         }
       })
     }

@@ -87,7 +87,8 @@ interface SettlementData {
   currentUserId: string
 }
 
-export default function TripPage({ params }: { params: { tripId: string } }) {
+export default function TripPage({ params }: { params: Promise<{ tripId: string }> }) {
+  const [resolvedParams, setResolvedParams] = useState<{ tripId: string } | null>(null)
   const { data: session, status } = useSession()
   const router = useRouter()
   const [trip, setTrip] = useState<Trip | null>(null)
@@ -102,19 +103,24 @@ export default function TripPage({ params }: { params: { tripId: string } }) {
   const [settlementLoading, setSettlementLoading] = useState(false)
 
   useEffect(() => {
+    params.then(setResolvedParams)
+  }, [params])
+
+  useEffect(() => {
     const handleAuth = async () => {
-      if (status === "loading") return // Still loading
+      if (status === "loading" || !resolvedParams) return // Still loading or params not resolved
       if (!session) router.push("/auth/signin") // Not authenticated
       if (session) await fetchTrip() // Fetch trip when authenticated
     }
     handleAuth()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session, status, router, params.tripId])
+  }, [session, status, router, resolvedParams?.tripId])
 
   const fetchTrip = async () => {
+    if (!resolvedParams) return
     setLoading(true)
     try {
-      const response = await fetch(`/api/trips/${params.tripId}`)
+      const response = await fetch(`/api/trips/${resolvedParams.tripId}`)
       if (response.ok) {
         const data = await response.json()
         setTrip(data)
@@ -132,7 +138,7 @@ export default function TripPage({ params }: { params: { tripId: string } }) {
 
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!expenseTitle.trim() || !expenseAmount.trim()) return
+    if (!expenseTitle.trim() || !expenseAmount.trim() || !resolvedParams) return
 
     const amount = parseFloat(expenseAmount)
     if (isNaN(amount) || amount <= 0) {
@@ -144,7 +150,7 @@ export default function TripPage({ params }: { params: { tripId: string } }) {
     setError("")
 
     try {
-      const response = await fetch(`/api/trips/${params.tripId}/expenses`, {
+      const response = await fetch(`/api/trips/${resolvedParams.tripId}/expenses`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -202,9 +208,10 @@ export default function TripPage({ params }: { params: { tripId: string } }) {
   }
 
   const fetchSettlement = async () => {
+    if (!resolvedParams) return
     setSettlementLoading(true)
     try {
-      const response = await fetch(`/api/trips/${params.tripId}/settle`)
+      const response = await fetch(`/api/trips/${resolvedParams.tripId}/settle`)
       if (response.ok) {
         const data = await response.json()
         setSettlementData(data)

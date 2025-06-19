@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 // GET /api/trips/[tripId] - Get a specific trip with details
 export async function GET(
   req: NextRequest,
-  { params }: { params: { tripId: string } }
+  { params }: { params: Promise<{ tripId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -30,7 +30,7 @@ export async function GET(
       )
     }
 
-    const { tripId } = params
+    const { tripId } = await params
 
     // Get trip with all details if user is a member
     const trip = await prisma.trip.findFirst({

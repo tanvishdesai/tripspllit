@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma"
 // POST /api/trips/[tripId]/expenses - Add an expense to a trip
 export async function POST(
   req: NextRequest,
-  { params }: { params: { tripId: string } }
+  { params }: { params: Promise<{ tripId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -30,7 +30,7 @@ export async function POST(
       )
     }
 
-    const { tripId } = params
+    const { tripId } = await params
     const body = await req.json()
     const { title, amount } = body
 
@@ -105,7 +105,7 @@ export async function POST(
 // GET /api/trips/[tripId]/expenses - Get expenses for a trip
 export async function GET(
   req: NextRequest,
-  { params }: { params: { tripId: string } }
+  { params }: { params: Promise<{ tripId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -129,7 +129,7 @@ export async function GET(
       )
     }
 
-    const { tripId } = params
+    const { tripId } = await params
 
     // Check if trip exists and user is a member
     const trip = await prisma.trip.findFirst({

@@ -70,7 +70,7 @@ function simplifyDebts(balances: UserBalance[]): SettlementTransaction[] {
 // GET /api/trips/[tripId]/settle - Calculate settlement for a trip
 export async function GET(
   req: NextRequest,
-  { params }: { params: { tripId: string } }
+  { params }: { params: Promise<{ tripId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions)
@@ -94,7 +94,7 @@ export async function GET(
       )
     }
 
-    const { tripId } = params
+    const { tripId } = await params
 
     // Check if trip exists and user is a member
     const trip = await prisma.trip.findFirst({
