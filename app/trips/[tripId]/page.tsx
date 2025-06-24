@@ -226,50 +226,57 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
-  // Enhanced UPI payment system with proper merchant verification
-  const generateUPIPaymentOptions = (transaction: SettlementTransaction) => {
-    const { to, amount } = transaction
-    const upiId = to.upiId
-    const recipientName = encodeURIComponent(to.name)
-    const transactionNote = encodeURIComponent(`TripSplit: Settlement for ${trip?.name || 'Trip'}`)
-    const merchantCode = "TRIPSPLIT" // Merchant identifier
-    const transactionRef = `TS${Date.now()}${Math.random().toString(36).substr(2, 5)}`.toUpperCase()
-    
-    // Generate multiple UPI payment options for better compatibility
-    const paymentOptions = {
-      // Standard UPI deep link with enhanced parameters
-      standard: `upi://pay?pa=${upiId}&pn=${recipientName}&am=${amount.toFixed(2)}&tn=${transactionNote}&cu=INR&mc=${merchantCode}&tr=${transactionRef}`,
-      
-      // Google Pay specific deep link
-      googlePay: `tez://upi/pay?pa=${upiId}&pn=${recipientName}&am=${amount.toFixed(2)}&tn=${transactionNote}&cu=INR&mc=${merchantCode}&tr=${transactionRef}`,
-      
-      // PhonePe specific deep link  
-      phonePe: `phonepe://pay?pa=${upiId}&pn=${recipientName}&am=${amount.toFixed(2)}&tn=${transactionNote}&cu=INR&mc=${merchantCode}&tr=${transactionRef}`,
-      
-      // Paytm specific deep link
-      paytm: `paytmmp://pay?pa=${upiId}&pn=${recipientName}&am=${amount.toFixed(2)}&tn=${transactionNote}&cu=INR&mc=${merchantCode}&tr=${transactionRef}`,
-      
-      // BHIM specific deep link
-      bhim: `bhim://pay?pa=${upiId}&pn=${recipientName}&am=${amount.toFixed(2)}&tn=${transactionNote}&cu=INR&mc=${merchantCode}&tr=${transactionRef}`
-    }
-    
-    return {
-      ...paymentOptions,
-      transactionRef,
-      merchantCode,
-      fallbackUrl: `https://upiweb.com/pay?pa=${upiId}&pn=${recipientName}&am=${amount.toFixed(2)}&tn=${transactionNote}&cu=INR`,
-      // Enhanced UPI parameters based on UPI specification
-      amount: amount.toFixed(2),
-      currency: 'INR',
-      recipientVPA: upiId,
-      recipientName: to.name
+  // Standard UPI Payment Gateway Implementation
+  const generateUPIPaymentRequest = async (transaction: SettlementTransaction) => {
+    try {
+      // This would typically call your backend API that interfaces with a UPI payment gateway
+      // For now, we'll implement a more standard UPI collection approach
+      const paymentData = {
+        amount: transaction.amount.toFixed(2),
+        currency: 'INR',
+        order_id: `TRIP_${trip?.id}_${Date.now()}`,
+        customer_id: transaction.from.id,
+        customer_name: transaction.from.name,
+        customer_email: transaction.from.email || '',
+        description: `Settlement for ${trip?.name || 'Trip'} - Pay ${transaction.to.name}`,
+        return_url: window.location.href,
+        notify_url: `${window.location.origin}/api/trips/${trip?.id}/payment-webhook`,
+        merchant_name: 'TripSplit',
+        merchant_vpa: transaction.to.upiId,
+        // Additional metadata for reconciliation
+        metadata: {
+          trip_id: trip?.id,
+          settlement_from: transaction.from.id,
+          settlement_to: transaction.to.id,
+          transaction_type: 'settlement'
+        }
+      }
+
+      // Call backend API to create payment request
+      const response = await fetch(`/api/trips/${trip?.id}/create-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(paymentData)
+      })
+
+      if (!response.ok) {
+        throw new Error(`Payment creation failed: ${response.statusText}`)
+      }
+
+      const paymentResponse = await response.json()
+      return paymentResponse
+    } catch (error) {
+      console.error('Error creating payment request:', error)
+      throw error
     }
   }
 
-  const handleUPIPayment = async (transaction: SettlementTransaction, appType: string = 'standard') => {
+  const handleUPIPayment = async (transaction: SettlementTransaction) => {
     if (!resolvedParams) return
     
-    // Validate transaction amount (minimum INR 1, maximum INR 1,00,000 for UPI)
+    // Validate transaction amount
     if (transaction.amount < 1) {
       alert('Payment amount must be at least ₹1')
       return
@@ -282,112 +289,81 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
 
     // Validate UPI ID format
     if (!transaction.to.upiId || !transaction.to.upiId.includes('@')) {
-      alert('Invalid UPI ID format. Please check the recipient UPI ID.')
+      alert('Invalid UPI ID format for recipient')
       return
     }
-    
-    const paymentOptions = generateUPIPaymentOptions(transaction)
-    const selectedUrl = paymentOptions[appType as keyof typeof paymentOptions] || paymentOptions.standard
-    
+
     try {
-      // First, log the payment attempt to our backend
-      const response = await fetch(`/api/trips/${resolvedParams.tripId}/upi-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          transactionRef: paymentOptions.transactionRef,
-          amount: transaction.amount,
-          toUserId: transaction.to.id,
-          appType
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to log payment attempt')
-      }
-
-      const paymentData = await response.json()
-      console.log('Payment attempt logged:', paymentData)
-
-      // Try to open the UPI app
-      if (typeof window !== 'undefined') {
-        const userAgent = navigator.userAgent.toLowerCase()
-        const isMobile = /android|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent)
+      setPaymentStatusMessage('Initiating payment...')
+      
+      // Create payment request through proper gateway
+      const paymentRequest = await generateUPIPaymentRequest(transaction)
+      
+      if (paymentRequest.payment_url) {
+        // Redirect to payment gateway's hosted page
+        window.location.href = paymentRequest.payment_url
+      } else if (paymentRequest.qr_code) {
+        // Display QR code for scanning
+        const qrWindow = window.open('', '_blank', 'width=400,height=500')
+        qrWindow?.document.write(`
+          <html>
+            <head><title>UPI Payment - ${trip?.name}</title></head>
+            <body style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
+              <h2>Scan to Pay ₹${transaction.amount.toFixed(2)}</h2>
+              <p>To: ${transaction.to.name}</p>
+              <p>UPI ID: ${transaction.to.upiId}</p>
+              <img src="${paymentRequest.qr_code}" alt="UPI QR Code" style="max-width: 300px;" />
+              <p><small>Scan this QR code with any UPI app</small></p>
+              <p><small>Order ID: ${paymentRequest.order_id}</small></p>
+              <button onclick="window.close()" style="margin-top: 20px; padding: 10px 20px;">Close</button>
+            </body>
+          </html>
+        `)
+      } else {
+        // Fallback to UPI intent (for mobile)
+        const upiIntent = `upi://pay?pa=${encodeURIComponent(transaction.to.upiId)}&pn=${encodeURIComponent(transaction.to.name)}&am=${transaction.amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Settlement for ${trip?.name}`)}&tr=${encodeURIComponent(paymentRequest.order_id)}`
         
-        if (isMobile) {
-          // On mobile, try the deep link first
-          window.location.href = selectedUrl
+        if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+          // Try UPI deep link first
+          window.location.href = upiIntent
           
-          // Fallback to web UPI if app doesn't open within 3 seconds
+          // Show success message
           setTimeout(() => {
-            if (document.visibilityState === 'visible') {
-              // If still on the page, show instructions
-              alert(`
-UPI App not found or failed to open.
+            setPaymentStatusMessage(`
+✅ UPI payment initiated!
 
-Payment Details:
-• Amount: ₹${transaction.amount.toFixed(2)}
-• To: ${transaction.to.name} (${transaction.to.upiId})
-• Transaction ID: ${paymentOptions.transactionRef}
-
-Please manually open your UPI app and pay using the above details, or try the web interface.
-              `)
-              window.open(paymentOptions.fallbackUrl, '_blank')
-            }
-          }, 3000)
-        } else {
-          // On desktop, show payment instructions and open web UPI
-          const confirmed = confirm(`
-You are about to make a UPI payment:
-
-Amount: ₹${transaction.amount.toFixed(2)}
-To: ${transaction.to.name}
-UPI ID: ${transaction.to.upiId}
-Transaction ID: ${paymentOptions.transactionRef}
-
-Click OK to open the web UPI interface, or Cancel to copy the UPI ID.
-          `)
-          
-          if (confirmed) {
-            window.open(paymentOptions.fallbackUrl, '_blank')
-          } else {
-            // Copy UPI ID to clipboard
-            navigator.clipboard.writeText(transaction.to.upiId).then(() => {
-              alert(`UPI ID copied to clipboard: ${transaction.to.upiId}`)
-            }).catch(() => {
-              alert(`UPI ID: ${transaction.to.upiId}`)
-            })
-          }
-        }
-        
-        // Show success message with transaction reference
-        setTimeout(() => {
-          setPaymentStatusMessage(`
-✅ Payment initiated successfully!
-
-Transaction Reference: ${paymentOptions.transactionRef}
-Amount: ₹${transaction.amount.toFixed(2)}
-To: ${transaction.to.name}
-
-Please complete the payment in your UPI app. Payment may take a few minutes to process.
-          `)
-          
-          // Clear message after 10 seconds
-          setTimeout(() => setPaymentStatusMessage(""), 10000)
-        }, 1000)
-      }
-    } catch (error) {
-      console.error('Error initiating UPI payment:', error)
-      alert(`
-Error initiating payment: ${error instanceof Error ? error.message : 'Unknown error'}
-
-You can still make the payment manually:
-• Amount: ₹${transaction.amount.toFixed(2)}
+If your UPI app didn't open automatically:
 • UPI ID: ${transaction.to.upiId}
-• Recipient: ${transaction.to.name}
-      `)
+• Amount: ₹${transaction.amount.toFixed(2)}
+• Reference: ${paymentRequest.order_id}
+
+Open any UPI app and send money manually.
+            `)
+          }, 2000)
+        } else {
+          // For desktop, show QR code and manual instructions
+          setPaymentStatusMessage(`
+💳 UPI Payment Instructions:
+
+Method 1: Scan QR Code
+• Open any UPI app on your phone
+• Scan the QR code that opened in new window
+• Complete the payment
+
+Method 2: Manual Payment
+• UPI ID: ${transaction.to.upiId}
+• Amount: ₹${transaction.amount.toFixed(2)}
+• Reference: ${paymentRequest.order_id}
+
+Method 3: Copy UPI Link
+• ${upiIntent}
+          `)
+        }
+      }
+      
+    } catch (error) {
+      console.error('Payment initiation failed:', error)
+      setPaymentStatusMessage('Payment failed to initiate. Please try again or contact support.')
     }
   }
 
@@ -757,44 +733,18 @@ You can still make the payment manually:
                               <div>
                                 {transaction.from.id === settlementData.currentUserId && (
                                   <div className="space-y-2">
-                                    {/* Primary UPI Button */}
+                                    {/* Primary UPI Payment Button */}
                                     <button
-                                      onClick={() => handleUPIPayment(transaction, 'standard')}
-                                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors inline-flex items-center w-full justify-center"
+                                      onClick={() => handleUPIPayment(transaction)}
+                                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 transition-colors inline-flex items-center w-full justify-center font-medium shadow-sm"
                                     >
-                                      💳 Pay with UPI
+                                      💳 Pay ₹{transaction.amount.toFixed(2)} via UPI
                                     </button>
                                     
-                                    {/* Specific Payment App Options */}
-                                    <div className="flex flex-wrap gap-1">
-                                      <button
-                                        onClick={() => handleUPIPayment(transaction, 'googlePay')}
-                                        className="bg-blue-500 text-white px-2 py-1 rounded text-xs hover:bg-blue-600 transition-colors"
-                                        title="Pay with Google Pay"
-                                      >
-                                        GPay
-                                      </button>
-                                      <button
-                                        onClick={() => handleUPIPayment(transaction, 'phonePe')}
-                                        className="bg-purple-500 text-white px-2 py-1 rounded text-xs hover:bg-purple-600 transition-colors"
-                                        title="Pay with PhonePe"
-                                      >
-                                        PhonePe
-                                      </button>
-                                      <button
-                                        onClick={() => handleUPIPayment(transaction, 'paytm')}
-                                        className="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 transition-colors"
-                                        title="Pay with Paytm"
-                                      >
-                                        Paytm
-                                      </button>
-                                      <button
-                                        onClick={() => handleUPIPayment(transaction, 'bhim')}
-                                        className="bg-orange-500 text-white px-2 py-1 rounded text-xs hover:bg-orange-600 transition-colors"
-                                        title="Pay with BHIM"
-                                      >
-                                        BHIM
-                                      </button>
+                                    {/* Recipient Details */}
+                                    <div className="text-xs text-gray-600 text-center">
+                                      To: {transaction.to.name}<br/>
+                                      UPI: {transaction.to.upiId}
                                     </div>
                                   </div>
                                 )}
