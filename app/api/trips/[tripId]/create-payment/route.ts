@@ -6,26 +6,14 @@ import { prisma } from "@/lib/prisma"
 // Razorpay configuration (you'll need to install razorpay: npm install razorpay)
 // For now, we'll implement a mock version that provides the standard UPI interface
 
-interface PaymentRequest {
+interface PaymentLogRequest {
   amount: string
-  currency: string
-  order_id: string
-  customer_id: string
-  customer_name: string
-  customer_email: string
+  toUserId: string
   description: string
-  return_url: string
-  notify_url: string
-  merchant_name: string
-  merchant_vpa: string
-  metadata: {
-    trip_id: string
-    settlement_from: string
-    settlement_to: string
-    transaction_type: string
-  }
+  upiId: string
 }
 
+// Simple payment logging API - no complex gateway integration needed
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ tripId: string }> }
@@ -52,7 +40,7 @@ export async function POST(
     }
 
     const resolvedParams = await params
-    const paymentData: PaymentRequest = await req.json()
+    const paymentData: PaymentLogRequest = await req.json()
 
     // Validate the trip exists and user has access
     const trip = await prisma.trip.findFirst({
@@ -81,76 +69,51 @@ export async function POST(
       )
     }
 
-    // For production, you would integrate with Razorpay here:
-    // const Razorpay = require('razorpay')
-    // const razorpay = new Razorpay({
-    //   key_id: process.env.RAZORPAY_KEY_ID,
-    //   key_secret: process.env.RAZORPAY_KEY_SECRET
-    // })
-    
-    // const order = await razorpay.orders.create({
-    //   amount: Math.round(amount * 100), // Amount in paise
-    //   currency: 'INR',
-    //   receipt: paymentData.order_id,
-    //   payment_capture: 1
-    // })
-
-    // Since we don't have Razorpay set up, let's provide a working fallback solution
-    // This creates a UPI payment request that works with the standard UPI specification
-    
-    const orderId = paymentData.order_id
-    const upiPaymentUrl = `upi://pay?pa=${encodeURIComponent(paymentData.merchant_vpa)}&pn=${encodeURIComponent(paymentData.customer_name)}&am=${amount}&cu=INR&tn=${encodeURIComponent(paymentData.description)}&tr=${encodeURIComponent(orderId)}`
-    
-    // Create a proper UPI QR code URL (you can use any QR service)
-    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiPaymentUrl)}`
-    
-    // Log the payment attempt for tracking
-    try {
-      await prisma.user.update({
-        where: { id: user.id },
-        data: {
-          // This would be in a separate payment_attempts table in production
-          // For now, we'll just update the user's last activity
-          updatedAt: new Date()
-        }
-      })
-    } catch (error) {
-      console.log('Failed to log payment attempt:', error)
+    // Validate UPI ID format
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/
+    if (!upiRegex.test(paymentData.upiId)) {
+      return NextResponse.json(
+        { error: "Invalid UPI ID format" },
+        { status: 400 }
+      )
     }
 
-    // Return the payment response
-    const response = {
-      success: true,
-      order_id: orderId,
-      payment_url: upiPaymentUrl, // UPI deep link
-      qr_code: qrCodeUrl, // QR code for scanning
-      web_url: `${paymentData.return_url}?order_id=${orderId}&status=pending`, // Fallback web URL
+    // Generate transaction reference
+    const orderId = `TS${Date.now()}${Math.random().toString(36).substr(2, 5)}`
+    
+    // Log payment attempt for tracking (in production, store in payments table)
+    const paymentLog = {
+      orderId,
+      tripId: resolvedParams.tripId,
+      fromUserId: user.id,
+      toUserId: paymentData.toUserId,
       amount: amount,
       currency: 'INR',
       description: paymentData.description,
-      merchant_name: paymentData.merchant_name,
-      recipient_vpa: paymentData.merchant_vpa,
-      payment_methods: {
-        upi: {
-          enabled: true,
-          deep_link: upiPaymentUrl,
-          qr_code: qrCodeUrl
-        }
-      },
-      instructions: {
-        mobile: "Click the payment link to open your UPI app and complete the payment",
-        desktop: "Scan the QR code with any UPI app on your mobile device",
-        manual: `Send ₹${amount} to UPI ID: ${paymentData.merchant_vpa} with reference: ${orderId}`
-      }
+      recipientUpiId: paymentData.upiId,
+      status: 'initiated',
+      timestamp: new Date(),
+      userAgent: req.headers.get('user-agent') || 'unknown'
     }
+    
+    console.log('Payment attempt logged:', paymentLog)
 
-    return NextResponse.json(response)
+    // Return success response
+    return NextResponse.json({
+      success: true,
+      orderId,
+      amount,
+      currency: 'INR',
+      description: paymentData.description,
+      recipientUpiId: paymentData.upiId,
+      message: 'Payment attempt logged successfully'
+    })
 
   } catch (error) {
-    console.error('Payment creation error:', error)
+    console.error('Payment logging error:', error)
     return NextResponse.json(
       { 
-        error: "Failed to create payment request",
+        error: "Failed to log payment attempt",
         details: error instanceof Error ? error.message : "Unknown error"
       },
       { status: 500 }

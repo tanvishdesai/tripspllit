@@ -14,6 +14,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Validate UPI ID format
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/
+    if (!upiRegex.test(upiId)) {
+      return NextResponse.json(
+        { error: "Invalid UPI ID format. Please use format: user@bankname" },
+        { status: 400 }
+      )
+    }
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
       where: { email }

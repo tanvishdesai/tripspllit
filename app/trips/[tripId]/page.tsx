@@ -226,57 +226,31 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
     }
   }
 
-  // Standard UPI Payment Gateway Implementation
-  const generateUPIPaymentRequest = async (transaction: SettlementTransaction) => {
-    try {
-      // This would typically call your backend API that interfaces with a UPI payment gateway
-      // For now, we'll implement a more standard UPI collection approach
-      const paymentData = {
-        amount: transaction.amount.toFixed(2),
-        currency: 'INR',
-        order_id: `TRIP_${trip?.id}_${Date.now()}`,
-        customer_id: transaction.from.id,
-        customer_name: transaction.from.name,
-        customer_email: transaction.from.email || '',
-        description: `Settlement for ${trip?.name || 'Trip'} - Pay ${transaction.to.name}`,
-        return_url: window.location.href,
-        notify_url: `${window.location.origin}/api/trips/${trip?.id}/payment-webhook`,
-        merchant_name: 'TripSplit',
-        merchant_vpa: transaction.to.upiId,
-        // Additional metadata for reconciliation
-        metadata: {
-          trip_id: trip?.id,
-          settlement_from: transaction.from.id,
-          settlement_to: transaction.to.id,
-          transaction_type: 'settlement'
-        }
-      }
+  // UPI Payment Implementation - Clean and Working Solution
+  const validateUPIId = (upiId: string): boolean => {
+    // UPI ID format: username@bankname (e.g., user@paytm, 9876543210@ybl)
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/
+    return upiRegex.test(upiId)
+  }
 
-      // Call backend API to create payment request
-      const response = await fetch(`/api/trips/${trip?.id}/create-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(paymentData)
-      })
-
-      if (!response.ok) {
-        throw new Error(`Payment creation failed: ${response.statusText}`)
-      }
-
-      const paymentResponse = await response.json()
-      return paymentResponse
-    } catch (error) {
-      console.error('Error creating payment request:', error)
-      throw error
-    }
+  const generateUPIPaymentLink = (transaction: SettlementTransaction): string => {
+    const orderId = `TS${Date.now()}${Math.random().toString(36).substr(2, 5)}`
+    const amount = transaction.amount.toFixed(2)
+    const description = `TripSplit Settlement: ${trip?.name || 'Trip'}`
+    
+    // Standard UPI deep link following UPI specification
+    const upiLink = `upi://pay?pa=${encodeURIComponent(transaction.to.upiId)}&pn=${encodeURIComponent(transaction.to.name)}&am=${amount}&cu=INR&tn=${encodeURIComponent(description)}&tr=${encodeURIComponent(orderId)}`
+    
+    return upiLink
   }
 
   const handleUPIPayment = async (transaction: SettlementTransaction) => {
     if (!resolvedParams) return
     
-    // Validate transaction amount
+    // Clear any previous messages
+    setPaymentStatusMessage('')
+    
+    // Validate amount
     if (transaction.amount < 1) {
       alert('Payment amount must be at least ₹1')
       return
@@ -287,83 +261,195 @@ export default function TripPage({ params }: { params: Promise<{ tripId: string 
       return
     }
 
-    // Validate UPI ID format
-    if (!transaction.to.upiId || !transaction.to.upiId.includes('@')) {
-      alert('Invalid UPI ID format for recipient')
+    // Validate UPI ID
+    if (!transaction.to.upiId || !validateUPIId(transaction.to.upiId)) {
+      alert('Invalid UPI ID format for recipient. Please contact the recipient to update their UPI ID.')
       return
     }
 
     try {
       setPaymentStatusMessage('Initiating payment...')
       
-      // Create payment request through proper gateway
-      const paymentRequest = await generateUPIPaymentRequest(transaction)
+      // Generate UPI payment link
+      const upiLink = generateUPIPaymentLink(transaction)
+      const orderId = upiLink.match(/tr=([^&]*)/)?.[1] || `TS${Date.now()}`
       
-      if (paymentRequest.payment_url) {
-        // Redirect to payment gateway's hosted page
-        window.location.href = paymentRequest.payment_url
-      } else if (paymentRequest.qr_code) {
-        // Display QR code for scanning
-        const qrWindow = window.open('', '_blank', 'width=400,height=500')
-        qrWindow?.document.write(`
-          <html>
-            <head><title>UPI Payment - ${trip?.name}</title></head>
-            <body style="text-align: center; padding: 20px; font-family: Arial, sans-serif;">
-              <h2>Scan to Pay ₹${transaction.amount.toFixed(2)}</h2>
-              <p>To: ${transaction.to.name}</p>
-              <p>UPI ID: ${transaction.to.upiId}</p>
-              <img src="${paymentRequest.qr_code}" alt="UPI QR Code" style="max-width: 300px;" />
-              <p><small>Scan this QR code with any UPI app</small></p>
-              <p><small>Order ID: ${paymentRequest.order_id}</small></p>
-              <button onclick="window.close()" style="margin-top: 20px; padding: 10px 20px;">Close</button>
-            </body>
-          </html>
-        `)
-      } else {
-        // Fallback to UPI intent (for mobile)
-        const upiIntent = `upi://pay?pa=${encodeURIComponent(transaction.to.upiId)}&pn=${encodeURIComponent(transaction.to.name)}&am=${transaction.amount.toFixed(2)}&cu=INR&tn=${encodeURIComponent(`Settlement for ${trip?.name}`)}&tr=${encodeURIComponent(paymentRequest.order_id)}`
+      // Detect device type
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      
+      if (isMobile) {
+        // Mobile device - try to open UPI app directly
+        setPaymentStatusMessage('Opening UPI app...')
         
-        if (/Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
-          // Try UPI deep link first
-          window.location.href = upiIntent
-          
-          // Show success message
-          setTimeout(() => {
-            setPaymentStatusMessage(`
-✅ UPI payment initiated!
-
-If your UPI app didn't open automatically:
-• UPI ID: ${transaction.to.upiId}
-• Amount: ₹${transaction.amount.toFixed(2)}
-• Reference: ${paymentRequest.order_id}
-
-Open any UPI app and send money manually.
-            `)
-          }, 2000)
-        } else {
-          // For desktop, show QR code and manual instructions
+        // Try to open UPI app
+        window.location.href = upiLink
+        
+        // Show instructions after 3 seconds
+        setTimeout(() => {
           setPaymentStatusMessage(`
-💳 UPI Payment Instructions:
+✅ UPI Payment Initiated
 
-Method 1: Scan QR Code
-• Open any UPI app on your phone
-• Scan the QR code that opened in new window
-• Complete the payment
-
-Method 2: Manual Payment
-• UPI ID: ${transaction.to.upiId}
+Payment Details:
 • Amount: ₹${transaction.amount.toFixed(2)}
-• Reference: ${paymentRequest.order_id}
+• To: ${transaction.to.name}
+• UPI ID: ${transaction.to.upiId}
+• Reference: ${orderId}
 
-Method 3: Copy UPI Link
-• ${upiIntent}
+If your UPI app didn't open:
+1. Open any UPI app (GPay, PhonePe, Paytm, BHIM)
+2. Send money to: ${transaction.to.upiId}
+3. Amount: ₹${transaction.amount.toFixed(2)}
+4. Add reference: ${orderId}
+
+✨ Complete the payment in your UPI app
+          `)
+        }, 3000)
+        
+      } else {
+        // Desktop device - show QR code and manual instructions
+        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiLink)}`
+        
+        // Open QR code in new window
+        const qrWindow = window.open('', '_blank', 'width=400,height=600,scrollbars=yes')
+        if (qrWindow) {
+          qrWindow.document.write(`
+            <!DOCTYPE html>
+            <html>
+              <head>
+                <title>UPI Payment - ${trip?.name}</title>
+                <meta name="viewport" content="width=device-width, initial-scale=1">
+                <style>
+                  body { 
+                    font-family: Arial, sans-serif; 
+                    text-align: center; 
+                    padding: 20px; 
+                    margin: 0;
+                    background: #f9fafb;
+                  }
+                  .container {
+                    background: white;
+                    border-radius: 12px;
+                    padding: 20px;
+                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    max-width: 350px;
+                    margin: 0 auto;
+                  }
+                  .amount { 
+                    font-size: 24px; 
+                    font-weight: bold; 
+                    color: #059669; 
+                    margin: 10px 0;
+                  }
+                  .details {
+                    background: #f3f4f6;
+                    padding: 15px;
+                    border-radius: 8px;
+                    margin: 15px 0;
+                    text-align: left;
+                  }
+                  .qr-code {
+                    border: 2px solid #e5e7eb;
+                    border-radius: 8px;
+                    padding: 10px;
+                    background: white;
+                    margin: 15px 0;
+                  }
+                  .instructions {
+                    text-align: left;
+                    background: #eff6ff;
+                    padding: 15px;
+                    border-radius: 8px;
+                    border-left: 4px solid #3b82f6;
+                    margin: 15px 0;
+                  }
+                  .close-btn {
+                    background: #6366f1;
+                    color: white;
+                    border: none;
+                    padding: 12px 24px;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    font-size: 16px;
+                    margin-top: 15px;
+                  }
+                  .close-btn:hover {
+                    background: #4f46e5;
+                  }
+                </style>
+              </head>
+              <body>
+                <div class="container">
+                  <h2>🏦 UPI Payment</h2>
+                  <div class="amount">₹${transaction.amount.toFixed(2)}</div>
+                  
+                  <div class="details">
+                    <strong>To:</strong> ${transaction.to.name}<br>
+                    <strong>UPI ID:</strong> ${transaction.to.upiId}<br>
+                    <strong>Reference:</strong> ${orderId}
+                  </div>
+
+                  <div class="qr-code">
+                    <img src="${qrCodeUrl}" alt="UPI QR Code" style="max-width: 250px; width: 100%;" />
+                  </div>
+
+                  <div class="instructions">
+                    <strong>📱 How to Pay:</strong><br>
+                    1. Open any UPI app on your phone<br>
+                    2. Scan the QR code above<br>
+                    3. Verify payment details<br>
+                    4. Enter your UPI PIN<br>
+                    5. Complete the payment
+                  </div>
+
+                  <button onclick="window.close()" class="close-btn">Close Window</button>
+                </div>
+              </body>
+            </html>
           `)
         }
+        
+        // Show desktop instructions
+        setPaymentStatusMessage(`
+💳 UPI Payment - Desktop Instructions
+
+Payment Details:
+• Amount: ₹${transaction.amount.toFixed(2)}
+• To: ${transaction.to.name}
+• UPI ID: ${transaction.to.upiId}
+• Reference: ${orderId}
+
+📱 Payment Methods:
+
+Method 1 - QR Code (Recommended):
+• QR code opened in new window
+• Scan with any UPI app on your phone
+• Complete payment
+
+Method 2 - Manual Payment:
+• Open any UPI app on your phone
+• Send money to: ${transaction.to.upiId}
+• Amount: ₹${transaction.amount.toFixed(2)}
+• Add reference: ${orderId}
+
+Method 3 - Copy UPI Link:
+${upiLink}
+
+✨ After payment, let the recipient know the reference: ${orderId}
+        `)
       }
       
     } catch (error) {
       console.error('Payment initiation failed:', error)
-      setPaymentStatusMessage('Payment failed to initiate. Please try again or contact support.')
+      setPaymentStatusMessage(`
+❌ Payment Failed to Start
+
+Please try manual payment:
+• Open any UPI app
+• Send ₹${transaction.amount.toFixed(2)} to: ${transaction.to.upiId}
+• Add note: Settlement for ${trip?.name}
+
+Need help? Contact support.
+      `)
     }
   }
 
@@ -694,22 +780,21 @@ Method 3: Copy UPI Link
 
                   {/* Payment Status Message */}
                   {paymentStatusMessage && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <pre className="text-sm text-green-800 whitespace-pre-line">{paymentStatusMessage}</pre>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <pre className="text-sm text-blue-800 whitespace-pre-line font-mono">{paymentStatusMessage}</pre>
                     </div>
                   )}
 
                   {/* UPI Payment Help */}
                   {settlementData.transactions.some(t => t.from.id === settlementData.currentUserId) && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                      <h3 className="text-lg font-medium text-blue-900 mb-2">💡 UPI Payment Tips</h3>
-                      <div className="text-sm text-blue-800 space-y-1">
-                        <p>• <strong>Mobile users:</strong> Click Pay with UPI to open your payment app directly</p>
-                        <p>• <strong>Desktop users:</strong> Use the web UPI interface or copy the UPI ID</p>
-                        <p>• <strong>Payment not working?</strong> Try different payment apps (GPay, PhonePe, Paytm, BHIM)</p>
-                        <p>• <strong>Transaction reference:</strong> Keep it for your records and payment verification</p>
-                        <p>• <strong>Amount issues?</strong> Check your daily transaction limits in your banking app</p>
-                        <p>• <strong>Still having issues?</strong> Make the payment manually using the recipient&apos;s UPI ID</p>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                      <h3 className="text-lg font-medium text-green-900 mb-2">💡 UPI Payment Guide</h3>
+                      <div className="text-sm text-green-800 space-y-1">
+                        <p>• <strong>Mobile users:</strong> Click the payment button to open your UPI app directly</p>
+                        <p>• <strong>Desktop users:</strong> Use the QR code that opens or copy the UPI link</p>
+                        <p>• <strong>Supported apps:</strong> Google Pay, PhonePe, Paytm, BHIM, and all UPI apps</p>
+                        <p>• <strong>Payment limits:</strong> ₹1 to ₹1,00,000 per transaction</p>
+                        <p>• <strong>Need help?</strong> Try manual payment using the recipients UPI ID</p>
                       </div>
                     </div>
                   )}
